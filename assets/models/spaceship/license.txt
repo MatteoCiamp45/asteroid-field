@@ -1,0 +1,8 @@
+Model Information:
+* title:	Spaceship - Ogre! Final Frontier
+* source:	https://sketchfab.com/3d-models/spaceship-ogre-final-frontier-0cb1796aee6942cbae838e19e00f8a27
+* author:	Cherry Onion Productions (https://sketchfab.com/CherryOnionProductions)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

@@ -7,12 +7,16 @@
  * Controls: left-drag to orbit · scroll to zoom · right-drag to pan
  * Hover over an asteroid to highlight it (red emissive, forest-exercise style).
  * Click & drag to move it — orbit recalculates from the drop position.
+ * 
+ * npm run dev per eseguire
+ * 
  */
 
 import * as THREE from 'three'
 import { OrbitControls }  from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader }     from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader }    from 'three/examples/jsm/loaders/DRACOLoader.js'
+import GUI from 'lil-gui'
 
 // ─── Loading UI helpers ───────────────────────────────────────────────────────
 const loadingScreen = document.getElementById('loading-screen')
@@ -61,10 +65,10 @@ controls.maxDistance    = 600
 controls.update()
 
 // ─── Lights ───────────────────────────────────────────────────────────────────
-const ambient = new THREE.AmbientLight(0x111133, 1.2)
+const ambient = new THREE.AmbientLight(0xfff5e0, 1.2)
 scene.add(ambient)
 
-const sun = new THREE.DirectionalLight(0xfff5e0, 3.5)
+const sun = new THREE.DirectionalLight(0xfff5e0, 5)
 sun.position.set(200, 150, 80)
 sun.castShadow           = true
 sun.shadow.mapSize.set(2048, 2048)
@@ -82,6 +86,99 @@ const rimLight = new THREE.DirectionalLight(0x2244aa, 0.6)
 rimLight.position.set(-150, -80, -120)
 scene.add(rimLight)
 
+// ─── Debug GUI ────────────────────────────────────────────────────────────────
+const guiParams = {
+  // Orbite
+  orbitSpeedMultiplier: 1.0,
+  spinSpeedMultiplier:  1.0,
+  // Campo
+  fieldRadius:    200,
+  fieldThickness: 60,
+  // Luci
+  shadows:          true,
+  ambientIntensity: 1.2,
+  sunIntensity:     3.5,
+  // Collisioni
+  collisionsEnabled: true,
+  // Esplosioni
+  particleCount:     500,
+  explosionDuration: 2.0,
+  explosionSpeed:    40,
+  particleSize:      4,
+  // Navicella
+  shipSpeed:      0.3,
+  followShip:     false,
+}
+
+const gui = new GUI({ title: 'Asteroid Field' })
+
+// ── Sezione: Orbite ───────────────────────────────────────────────────────────
+const folderOrbits = gui.addFolder('Orbits')
+folderOrbits.add(guiParams, 'orbitSpeedMultiplier', 0, 5, 0.01).name('Orbit Speed')
+folderOrbits.add(guiParams, 'spinSpeedMultiplier',  0, 5, 0.01).name('Spin Speed')
+
+// ── Sezione: Campo ────────────────────────────────────────────────────────────
+const folderField = gui.addFolder('Field')
+
+let prevFieldRadius = guiParams.fieldRadius
+
+folderField.add(guiParams, 'fieldRadius', 50, 500, 1).name('Radius').onChange((val) => {
+  const ratio = val / FIELD_RADIUS   // sempre relativo al valore originale
+  asteroidGroup.children.forEach((asteroid) => {
+    asteroid.userData.orbitRadius = asteroid.userData.baseOrbitRadius * ratio
+  })
+  prevFieldRadius = val
+})
+
+let prevFieldThickness = guiParams.fieldThickness
+
+folderField.add(guiParams, 'fieldThickness', 0, 200, 1).name('Thickness').onChange((val) => {
+  const ratio = val / FIELD_THICKNESS   // sempre relativo al valore originale
+  asteroidGroup.children.forEach((asteroid) => {
+    asteroid.userData.orbitY = asteroid.userData.baseOrbitY * ratio
+  })
+  prevFieldThickness = val
+})
+
+// ── Sezione: Luci ─────────────────────────────────────────────────────────────
+const folderLights = gui.addFolder('Lights')
+folderLights.add(guiParams, 'shadows').name('Shadows').onChange((val) => {
+  renderer.shadowMap.enabled = val
+  scene.traverse((node) => {
+    if (node.isMesh) node.material.needsUpdate = true
+  })
+})
+folderLights.add(guiParams, 'ambientIntensity', 0, 20,  0.1).name('Ambient').onChange((val) => {
+  ambient.intensity = val
+})
+folderLights.add(guiParams, 'sunIntensity',     0, 15, 0.1 ).name('Sun').onChange((val) => {
+  sun.intensity = val
+})
+
+// ── Sezione: Collisioni ───────────────────────────────────────────────────────
+const folderCollisions = gui.addFolder('Collisions')
+folderCollisions.add(guiParams, 'collisionsEnabled').name('Enabled')
+
+// ── Sezione: Esplosioni ───────────────────────────────────────────────────────
+const folderExplosions = gui.addFolder('Explosions')
+folderExplosions.add(guiParams, 'particleCount',     50, 2000, 10).name('Particles')
+folderExplosions.add(guiParams, 'explosionDuration', 0.5, 8,  0.1).name('Duration (s)')
+folderExplosions.add(guiParams, 'explosionSpeed',    5,  150,  1 ).name('Speed')
+folderExplosions.add(guiParams, 'particleSize',      1,   20,  0.5).name('Particle Size')
+
+// ── Sezione: Navicella ────────────────────────────────────────────────────────
+const folderShip = gui.addFolder('Ship')
+folderShip.add(guiParams, 'shipSpeed', 0.05, 2, 0.01).name('Speed')
+folderShip.add(guiParams, 'followShip').name('Follow Camera').onChange((val) => {
+  if (!val) {
+    // Quando si disattiva, ripristina la camera alla posizione originale
+    controls.enabled = true
+    camera.position.set(0, 40, 120)
+    controls.target.set(0, 0, 0)
+    controls.update()
+  }
+})
+
 // ─── Skybox ───────────────────────────────────────────────────────────────────
 // PATH PLACEHOLDER
 const SKYBOX_PATH  = '/textures/skybox/'
@@ -96,9 +193,9 @@ const SKYBOX_FILES = [
 
 // ─── Asteroid constants ───────────────────────────────────────────────────────
 const ASTEROID_COUNT  = 20
-const FIELD_RADIUS    = 180
+const FIELD_RADIUS    = 200
 const FIELD_THICKNESS = 60
-const SCALE_MIN       = 10
+const SCALE_MIN       = 5
 const SCALE_MAX       = 25
 
 // ─── Asteroid group ───────────────────────────────────────────────────────────
@@ -163,6 +260,14 @@ gltfLoader.load(
 
       const s = (SCALE_MIN + Math.random() * (SCALE_MAX - SCALE_MIN)) * normalise
       clone.scale.setScalar(s)
+      clone.updateMatrixWorld(true)
+
+      const sphere = new THREE.Sphere()
+      new THREE.Box3()
+        .setFromObject(clone)
+        .getBoundingSphere(sphere)
+
+      clone.userData.collisionRadius = sphere.radius
 
       clone.rotation.set(
         Math.random() * Math.PI * 2,
@@ -194,6 +299,10 @@ gltfLoader.load(
       // findRootAsteroid restituisce.
       clone.userData.isDragged   = false
       clone.userData.id = `asteroid-${i}`
+
+      clone.userData.baseOrbitRadius = clone.userData.orbitRadius
+      clone.userData.baseOrbitY      = clone.userData.orbitY
+
 
       // Ensure each clone has its own material instances so changing
       // `emissive` on one mesh doesn't affect all clones sharing the same
@@ -228,6 +337,48 @@ gltfLoader.load(
   }
 )
 
+// ─── Ship model ───────────────────────────────────────────────────────────────
+const SHIP_MODEL_PATH = '/models/spaceship/scene.gltf'
+
+gltfLoader.load(
+  SHIP_MODEL_PATH,
+
+  (gltf) => {
+    ship = gltf.scene
+
+    // Normalizza dimensione
+    const bbox = new THREE.Box3().setFromObject(ship)
+    const size = new THREE.Vector3()
+    bbox.getSize(size)
+    const maxDim = Math.max(size.x, size.y, size.z)
+    const norm   = maxDim > 0 ? 1 / maxDim : 1
+    ship.scale.setScalar(norm * 25)
+
+    ship.traverse((node) => {
+      if (node.isMesh) {
+        node.castShadow    = true
+        node.receiveShadow = true
+      }
+    })
+
+    // Posizione iniziale sull'orbita
+    ship.position.set(SHIP_ORBIT_RADIUS, SHIP_ORBIT_Y, 0)
+
+    // Bounding sphere per collisioni
+    const sphere = new THREE.Sphere()
+    new THREE.Box3().setFromObject(ship).getBoundingSphere(sphere)
+    ship.userData.collisionRadius = sphere.radius
+
+    scene.add(ship)
+  },
+
+  undefined,
+
+  (err) => {
+    console.error('Ship GLTFLoader error:', err)
+  }
+)
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  INTERACTION SYSTEM
 //
@@ -255,6 +406,18 @@ const _hit      = new THREE.Vector3()
 
 let draggedAsteroid = null   // root Group being dragged
 let dragOffset      = null   // offset da pivot a hit point, in world space
+
+// ── Navicella ─────────────────────────────────────────────────────────────────
+let ship = null          // THREE.Object3D, assegnato dopo il caricamento del modello
+let shipAngle = 0        // angolo corrente sull'orbita
+let shipDead  = false    // true dopo collisione → blocca update
+
+// Raggio orbita navicella: appena fuori dal bordo esterno del campo
+const SHIP_ORBIT_RADIUS = FIELD_RADIUS * 1.15
+const SHIP_ORBIT_Y      = 0
+
+// Offset camera in modalità follow (world space relativo alla navicella)
+const CAM_OFFSET = new THREE.Vector3(0, 15, -40)
 
 // ── Highlight state ───────────────────────────────────────────────────────────
 let intersected = null
@@ -293,6 +456,154 @@ function updateHoverHighlight() {
     if (intersected) intersected.material.emissive.setHex(intersected.currentHex)
     intersected = null
     hoveredRoot = null
+  }
+}
+
+// ── Collision detection ─────────────────────────────────────
+function checkCollisions() {
+  const toRemove = new Set()
+
+  const asteroids = asteroidGroup.children
+
+  for (let i = 0; i < asteroids.length; i++) {
+    for (let j = i + 1; j < asteroids.length; j++) {
+
+      const a = asteroids[i]
+      const b = asteroids[j]
+
+      const posA = new THREE.Vector3()
+      const posB = new THREE.Vector3()
+      a.getWorldPosition(posA)
+      b.getWorldPosition(posB)
+      const distance = posA.distanceTo(posB)
+
+      if (distance < a.userData.collisionRadius + b.userData.collisionRadius) {
+
+        const center = new THREE.Vector3()
+          .addVectors(a.position, b.position)
+          .multiplyScalar(0.5)
+
+        console.log('Collision between:', a.userData.id, b.userData.id)
+        createExplosion(center)
+
+        toRemove.add(a)
+        toRemove.add(b)
+      }
+    }
+  }
+
+  toRemove.forEach(obj => asteroidGroup.remove(obj))
+}
+
+// ── Explosion effect ─────────────────────────────────────────
+const explosions = []
+
+function createExplosion(position) {
+  const particleCount = guiParams.particleCount
+
+  const geometry  = new THREE.BufferGeometry()
+  const positions = new Float32Array(particleCount * 3)
+  const velocities = []
+
+  for (let i = 0; i < particleCount; i++) {
+    positions[i * 3]     = position.x
+    positions[i * 3 + 1] = position.y
+    positions[i * 3 + 2] = position.z
+
+    const dir = new THREE.Vector3(
+      Math.random() - 0.5,
+      Math.random() - 0.5,
+      Math.random() - 0.5
+    ).normalize()
+
+    // explosionSpeed è la velocità massima — minimo è metà
+    dir.multiplyScalar(guiParams.explosionSpeed * 0.5 + Math.random() * guiParams.explosionSpeed * 0.5)
+    velocities.push(dir)
+  }
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+
+  const material = new THREE.PointsMaterial({
+    size:        guiParams.particleSize,
+    color:       0xffdd66,
+    transparent: true,
+    opacity:     1,
+    depthWrite:  false,
+    blending:    THREE.AdditiveBlending,
+  })
+
+  const light = new THREE.PointLight(0xffaa33, 250, 300)
+  light.position.copy(position)
+  scene.add(light)
+
+  const points = new THREE.Points(geometry, material)
+  scene.add(points)
+
+  explosions.push({
+    points,
+    light,
+    velocities,
+    life:    guiParams.explosionDuration,   // ← usa GUI
+    maxLife: guiParams.explosionDuration,   // ← usa GUI
+  })
+}
+
+// ─── Ship update ──────────────────────────────────────────────────────────────
+const _shipPos    = new THREE.Vector3()
+const _camTarget  = new THREE.Vector3()
+const _camDesired = new THREE.Vector3()
+
+function updateShip(dt) {
+  if (!ship || shipDead) return
+
+  // ── Orbita ──────────────────────────────────────────────────────────────────
+  shipAngle += guiParams.shipSpeed * dt
+  const sx = Math.cos(shipAngle) * SHIP_ORBIT_RADIUS
+  const sz = Math.sin(shipAngle) * SHIP_ORBIT_RADIUS
+  ship.position.set(sx, SHIP_ORBIT_Y, sz)
+
+  // Orienta la prua nella direzione del moto (tangente all'orbita)
+  const tangent = new THREE.Vector3(-Math.sin(shipAngle), 0, Math.cos(shipAngle))
+  ship.lookAt(ship.position.clone().sub(tangent))
+
+  // ── Collisione con asteroidi ─────────────────────────────────────────────────
+  ship.getWorldPosition(_shipPos)
+
+  for (const asteroid of asteroidGroup.children) {
+    const aPos = new THREE.Vector3()
+    asteroid.getWorldPosition(aPos)
+    const dist = _shipPos.distanceTo(aPos)
+
+    if (guiParams.collisionsEnabled && dist < ship.userData.collisionRadius + asteroid.userData.collisionRadius) {
+      // Esplosione al centro tra navicella e asteroide
+      const center = new THREE.Vector3().addVectors(_shipPos, aPos).multiplyScalar(0.5)
+      createExplosion(center)
+      scene.remove(ship)
+      shipDead = true
+      console.log('SHIP DESTROYED! Collision with asteroid id:', asteroid.userData.id)
+      return
+    }
+  }
+
+  // ── Camera follow ────────────────────────────────────────────────────────────
+  if (guiParams.followShip) {
+    // Azzera il pan di OrbitControls al momento dell'attivazione —
+    // controls.target spostato dal pan combatterebbe con il nostro lookAt.
+    // Resettiamo target → origin una sola volta per evitare il lerp che
+    // "tira" la camera verso il vecchio target ad ogni frame.
+    if (controls.enabled) {
+      controls.target.set(0, 0, 0)
+      controls.update()
+    }
+    controls.enabled = false
+
+    _camDesired.copy(CAM_OFFSET).applyQuaternion(ship.quaternion).add(ship.position)
+    camera.position.lerp(_camDesired, 0.08)
+
+    _camTarget.copy(ship.position)
+    camera.lookAt(_camTarget)
+  } else {
+    controls.enabled = true
   }
 }
 
@@ -429,17 +740,11 @@ function animate() {
   updateHoverHighlight()
 
   asteroidGroup.children.forEach((asteroid) => {
-    // FIX: flag isDragged invece di confronto per riferimento.
-    // asteroid === draggedAsteroid fallisce se findRootAsteroid restituisce
-    // un nodo diverso da quello che itera il forEach.
     if (asteroid.userData.isDragged) return
 
     const ud = asteroid.userData
 
-    // FIX: il loop calcolava la posizione orbitale in world space e la scriveva
-    // direttamente su .position (local space). Ora converte esplicitamente con
-    // worldToLocal prima di assegnare.
-    ud.orbitAngle += ud.orbitSpeed * dt
+    ud.orbitAngle += ud.orbitSpeed * guiParams.orbitSpeedMultiplier * dt
     _axis.copy(ud.orbitAxis)
     _quat.setFromAxisAngle(_axis, ud.orbitAngle)
     const worldPos = new THREE.Vector3(ud.orbitRadius, ud.orbitY, 0)
@@ -447,8 +752,42 @@ function animate() {
     asteroidGroup.worldToLocal(worldPos)
     asteroid.position.copy(worldPos)
 
-    asteroid.rotateOnAxis(ud.spinAxis, ud.spinSpeed * dt)
+    asteroid.rotateOnAxis(ud.spinAxis, ud.spinSpeed * guiParams.spinSpeedMultiplier * dt)
   })
+
+  if (guiParams.collisionsEnabled) checkCollisions()
+  updateShip(dt)
+
+  for (let e = explosions.length - 1; e >= 0; e--) {
+
+    const explosion = explosions[e]
+
+    const positions =
+      explosion.points.geometry.attributes.position.array
+
+    for (let i = 0; i < explosion.velocities.length; i++) {
+
+      positions[i * 3]     += explosion.velocities[i].x * dt
+      positions[i * 3 + 1] += explosion.velocities[i].y * dt
+      positions[i * 3 + 2] += explosion.velocities[i].z * dt
+    }
+
+    explosion.points.geometry.attributes.position.needsUpdate = true
+
+    explosion.life -= dt
+    const alpha = explosion.life / explosion.maxLife
+
+    explosion.points.material.opacity = alpha
+    explosion.light.intensity = alpha * 250
+
+    if (explosion.life <= 0) {
+      scene.remove(explosion.points)
+      scene.remove(explosion.light)
+      explosion.points.geometry.dispose()
+      explosion.points.material.dispose()
+      explosions.splice(e, 1)
+    }
+  }
 
   controls.update()
   renderer.render(scene, camera)

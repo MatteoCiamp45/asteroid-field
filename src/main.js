@@ -1,12 +1,13 @@
 /**
- * Asteroid Field — main.js
+ * Asteroid Field - main.js
  *
- * Skybox textures  → /assets/textures/skybox
- * Asteroid model   → /assets/models/asteroid
+ * Skybox textures: /assets/textures/skybox
+ * Asteroid model:  /assets/models/asteroid
+ * Spaceship model: /assets/models/spaceship
  *
- * Controls: left-drag to orbit · scroll to zoom · right-drag to pan
- * Hover over an asteroid to highlight it (red emissive, forest-exercise style).
- * Click & drag to move it — orbit recalculates from the drop position.
+ * Controls: left-drag to orbit / scroll to zoom / right-drag to pan
+ * Hover over an asteroid to highlight it (red emissive).
+ * Click & drag to move it, orbit recalculates from the drop position.
  * 
  * npm run dev per eseguire
  * 
@@ -65,10 +66,10 @@ controls.maxDistance    = 600
 controls.update()
 
 // ─── Lights ───────────────────────────────────────────────────────────────────
-const ambient = new THREE.AmbientLight(0xfff5e0, 1.2)
+const ambient = new THREE.AmbientLight(0xfff5e0, 1.2)             // luce ambiente
 scene.add(ambient)
 
-const sun = new THREE.DirectionalLight(0xfff5e0, 5)
+const sun = new THREE.DirectionalLight(0xfff5e0, 5)               // luce principale (sole)
 sun.position.set(200, 150, 80)
 sun.castShadow           = true
 sun.shadow.mapSize.set(2048, 2048)
@@ -82,7 +83,7 @@ sun.shadow.bias          = -0.001
 scene.add(sun)
 scene.add(sun.target)
 
-const rimLight = new THREE.DirectionalLight(0x2244aa, 0.6)
+const rimLight = new THREE.DirectionalLight(0x2244aa, 0.6)        // luce secondaria (rim light)
 rimLight.position.set(-150, -80, -120)
 scene.add(rimLight)
 
@@ -199,7 +200,7 @@ const SCALE_MIN       = 5
 const SCALE_MAX       = 25
 
 // ─── Asteroid group ───────────────────────────────────────────────────────────
-const asteroidGroup = new THREE.Group()
+const asteroidGroup = new THREE.Group() // tutti gli asteroidi sono figli di questo gruppo
 scene.add(asteroidGroup)
 
 // ─── Loaders ──────────────────────────────────────────────────────────────────
@@ -237,13 +238,15 @@ gltfLoader.load(
 
   (gltf) => {
     const sourceScene = gltf.scene
+    // abilitare ombre su tutti i mesh del modello originale
     sourceScene.traverse((node) => {
       if (node.isMesh) {
-        node.castShadow    = true
-        node.receiveShadow = true
+        node.castShadow    = true // ombre proiettate
+        node.receiveShadow = true // ombre ricevute
       }
     })
 
+    // normalizzazione modello GLTF
     const bbox = new THREE.Box3().setFromObject(sourceScene)
     const size = new THREE.Vector3()
     bbox.getSize(size)
@@ -252,16 +255,20 @@ gltfLoader.load(
 
     for (let i = 0; i < ASTEROID_COUNT; i++) {
       const clone  = sourceScene.clone(true)
+
+      // posizione iniziale casuale nell'orbita
       const angle  = Math.random() * Math.PI * 2
       const radius = FIELD_RADIUS * (0.5 + Math.random() * 0.5)
       const yOff   = (Math.random() - 0.5) * FIELD_THICKNESS * 2
 
       clone.position.set(Math.cos(angle) * radius, yOff, Math.sin(angle) * radius)
 
+      // scala casuale
       const s = (SCALE_MIN + Math.random() * (SCALE_MAX - SCALE_MIN)) * normalise
       clone.scale.setScalar(s)
       clone.updateMatrixWorld(true)
 
+      // bounding sphere per le collisioni
       const sphere = new THREE.Sphere()
       new THREE.Box3()
         .setFromObject(clone)
@@ -293,10 +300,8 @@ gltfLoader.load(
         Math.random() - 0.5
       ).normalize()
       clone.userData.spinSpeed   = 0.1 + Math.random() * 0.4
-      // FIX: flag usato dall'animate loop per saltare l'orbita durante il drag.
-      // Più robusto del confronto per riferimento (asteroid === draggedAsteroid)
-      // perché funziona indipendentemente da quale livello della gerarchia
-      // findRootAsteroid restituisce.
+
+      // flag usato dall'animate loop per saltare l'orbita durante il drag
       clone.userData.isDragged   = false
       clone.userData.id = `asteroid-${i}`
 
@@ -304,9 +309,11 @@ gltfLoader.load(
       clone.userData.baseOrbitY      = clone.userData.orbitY
 
 
-      // Ensure each clone has its own material instances so changing
-      // `emissive` on one mesh doesn't affect all clones sharing the same
-      // material reference from the original GLTF scene.
+      // clonazione materiali:
+      // sourceScene.clone(true) condivide i materiali tra tutti i cloni,
+      // impostare emissive.setHex(0xff0000) su un mesh cambierebbe il colore
+      // di tutti gli asteroidi contemporaneamente.
+      // Clonando ogni materiale qui, ogni clone ha istanze proprie e indipendenti.
       clone.traverse((node) => {
         if (node.isMesh && node.material) {
           node.material = Array.isArray(node.material)
@@ -323,6 +330,7 @@ gltfLoader.load(
     setProgress(0.9, 'Building scene…')
   },
 
+  // callback progresso
   (xhr) => {
     if (xhr.total > 0) {
       const p = 0.3 + (xhr.loaded / xhr.total) * 0.6
@@ -330,6 +338,7 @@ gltfLoader.load(
     }
   },
 
+  // callback errore
   (err) => {
     console.error('GLTFLoader error:', err)
     loadingText.textContent = 'Could not load asteroid model, check the path in main.js'
@@ -339,6 +348,9 @@ gltfLoader.load(
 
 // ─── Ship model ───────────────────────────────────────────────────────────────
 const SHIP_MODEL_PATH = '/models/spaceship/scene.gltf'
+let ship = null          // THREE.Object3D, assegnato dopo il caricamento del modello
+let shipAngle = 0        // angolo corrente sull'orbita
+let shipDead  = false    // true dopo collisione
 
 gltfLoader.load(
   SHIP_MODEL_PATH,
@@ -374,6 +386,7 @@ gltfLoader.load(
 
   undefined,
 
+  // callback errore
   (err) => {
     console.error('Ship GLTFLoader error:', err)
   }
@@ -381,37 +394,19 @@ gltfLoader.load(
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  INTERACTION SYSTEM
-//
-//  Highlight — forest-exercise pattern (intersectNaiveGeometry):
-//    • Every frame, cast a ray from pointer → intersectObjects on asteroidGroup
-//    • If we land on a new mesh: restore emissive of previous, store currentHex
-//      of the new one, set its emissive to 0xff0000
-//    • intersected tracks the single currently-red mesh (the deepest Mesh node
-//      hit by the ray, not the root Group — exactly like the forest exercise)
-//
-//  Drag:
-//    • mousedown: build a camera-facing drag plane passante per hits[0].point
-//      (il punto esatto sulla superficie, non il pivot del root Group)
-//    • mousemove: intersect ray with plane → converti _hit in local space di
-//      asteroidGroup prima di assegnarlo a .position
-//    • mouseup: leggi la world position con getWorldPosition() per ricalcolare
-//      i parametri orbitali (orbitRadius, orbitAngle, orbitY)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const raycaster = new THREE.Raycaster()
-const pointer   = new THREE.Vector2(-999, -999)   // NDC, starts off-screen
+const pointer   = new THREE.Vector2(-999, -999)   // punta fuori schermo all'inizio (evitare highlight involontari)
 
 const dragPlane = new THREE.Plane()
-const _hit      = new THREE.Vector3()
+const _hit      = new THREE.Vector3() //punto di intersezione raggio-piano (riutilizzato
+                                      // ogni frame per evitare allocazioni in animate)
 
 let draggedAsteroid = null   // root Group being dragged
 let dragOffset      = null   // offset da pivot a hit point, in world space
 
 // ── Navicella ─────────────────────────────────────────────────────────────────
-let ship = null          // THREE.Object3D, assegnato dopo il caricamento del modello
-let shipAngle = 0        // angolo corrente sull'orbita
-let shipDead  = false    // true dopo collisione → blocca update
-
 // Raggio orbita navicella: appena fuori dal bordo esterno del campo
 const SHIP_ORBIT_RADIUS = FIELD_RADIUS * 1.15
 const SHIP_ORBIT_Y      = 0
@@ -420,7 +415,7 @@ const SHIP_ORBIT_Y      = 0
 const CAM_OFFSET = new THREE.Vector3(0, 15, -40)
 
 // ── Highlight state ───────────────────────────────────────────────────────────
-let intersected = null
+let intersected = null  // singolo Mesh attualmente evidenziato in rosso
 let hoveredRoot = null
 
 // ── Helper: risale la gerarchia fino al figlio diretto di asteroidGroup ───────
@@ -438,9 +433,10 @@ function updateHoverHighlight() {
   const intersects = raycaster.intersectObjects(asteroidGroup.children, true)
 
   if (intersects.length > 0) {
-    const mesh = intersects[0].object
-    const root = findRootAsteroid(mesh)
+    const mesh = intersects[0].object     // mesh foglia più vicina alla camera
+    const root = findRootAsteroid(mesh)   // root group corrispondente
 
+    // Aggiorna l'highlight solo se il mesh colpito è cambiato rispetto al frame precedente
     if (intersected !== mesh) {
       if (intersected) intersected.material.emissive.setHex(intersected.currentHex)
       intersected = mesh
@@ -448,11 +444,13 @@ function updateHoverHighlight() {
       intersected.material.emissive.setHex(0xff0000)
     }
 
+    // Log dell'id del root Group solo quando cambia l'asteroide puntato
     if (root !== hoveredRoot) {
       hoveredRoot = root
       if (hoveredRoot) console.log('Hover asteroid id:', hoveredRoot.userData.id)
     }
   } else {
+    // Nessuna intersezione: ripristina l'emissive e azzera lo stato hover
     if (intersected) intersected.material.emissive.setHex(intersected.currentHex)
     intersected = null
     hoveredRoot = null
@@ -473,12 +471,15 @@ function checkCollisions() {
 
       const posA = new THREE.Vector3()
       const posB = new THREE.Vector3()
+      // recuperare posizioni globali degli asteroidi
       a.getWorldPosition(posA)
       b.getWorldPosition(posB)
       const distance = posA.distanceTo(posB)
 
+      // collisione se somma dei raggi > distanza tra i centri
       if (distance < a.userData.collisionRadius + b.userData.collisionRadius) {
 
+        // Centro dell'esplosione = punto medio tra i due pivot in local space
         const center = new THREE.Vector3()
           .addVectors(a.position, b.position)
           .multiplyScalar(0.5)
@@ -501,22 +502,27 @@ const explosions = []
 function createExplosion(position) {
   const particleCount = guiParams.particleCount
 
+  // BufferGeometry con un attributo 'position' per le particelle:
+  // tutte partono dallo stesso punto (posizione dell'esplosione) e si
+  // disperdono in direzioni casuali aggiornate nell'animate loop
   const geometry  = new THREE.BufferGeometry()
   const positions = new Float32Array(particleCount * 3)
   const velocities = []
 
   for (let i = 0; i < particleCount; i++) {
+    // Posizione iniziale di tutte le particelle
     positions[i * 3]     = position.x
     positions[i * 3 + 1] = position.y
     positions[i * 3 + 2] = position.z
 
+    // Direzione casuale uniforme sulla sfera unitaria
     const dir = new THREE.Vector3(
       Math.random() - 0.5,
       Math.random() - 0.5,
       Math.random() - 0.5
     ).normalize()
 
-    // explosionSpeed è la velocità massima — minimo è metà
+    // velocità scalare casuale tra [explosionSpeed, explosionSpeed/2]
     dir.multiplyScalar(guiParams.explosionSpeed * 0.5 + Math.random() * guiParams.explosionSpeed * 0.5)
     velocities.push(dir)
   }
@@ -527,11 +533,12 @@ function createExplosion(position) {
     size:        guiParams.particleSize,
     color:       0xffdd66,
     transparent: true,
-    opacity:     1,
+    opacity:     1,                             // calata linearmente a 0 in animate in base a life/maxLife
     depthWrite:  false,
-    blending:    THREE.AdditiveBlending,
+    blending:    THREE.AdditiveBlending,        // somma colori (particelle sovrappposte diventano più luminose)
   })
 
+  // PointLight temporanea per l'esplosione
   const light = new THREE.PointLight(0xffaa33, 250, 300)
   light.position.copy(position)
   scene.add(light)
@@ -543,15 +550,15 @@ function createExplosion(position) {
     points,
     light,
     velocities,
-    life:    guiParams.explosionDuration,   // ← usa GUI
-    maxLife: guiParams.explosionDuration,   // ← usa GUI
+    life:    guiParams.explosionDuration,   // tempo rimanente in secondi
+    maxLife: guiParams.explosionDuration,   // durata totale
   })
 }
 
 // ─── Ship update ──────────────────────────────────────────────────────────────
-const _shipPos    = new THREE.Vector3()
-const _camTarget  = new THREE.Vector3()
-const _camDesired = new THREE.Vector3()
+const _shipPos    = new THREE.Vector3() // posizione globale navicella
+const _camTarget  = new THREE.Vector3() // direzione vista camera in 'follow mode'
+const _camDesired = new THREE.Vector3() // posizione desiderata della camera in 'follow mode'
 
 function updateShip(dt) {
   if (!ship || shipDead) return
@@ -587,16 +594,16 @@ function updateShip(dt) {
 
   // ── Camera follow ────────────────────────────────────────────────────────────
   if (guiParams.followShip) {
-    // Azzera il pan di OrbitControls al momento dell'attivazione —
-    // controls.target spostato dal pan combatterebbe con il nostro lookAt.
-    // Resettiamo target → origin una sola volta per evitare il lerp che
-    // "tira" la camera verso il vecchio target ad ogni frame.
+    // Reset del target verso il centro
     if (controls.enabled) {
       controls.target.set(0, 0, 0)
       controls.update()
     }
     controls.enabled = false
 
+    // Posizione desiderata: CAM_OFFSET (dietro/sopra la prua) ruotato secondo
+    // l'orientamento corrente della navicella, poi traslato alla sua posizione.
+    // applyQuaternion trasforma l'offset da spazio locale navicella a world space.
     _camDesired.copy(CAM_OFFSET).applyQuaternion(ship.quaternion).add(ship.position)
     camera.position.lerp(_camDesired, 0.08)
 
@@ -607,17 +614,25 @@ function updateShip(dt) {
   }
 }
 
-// ── mousemove ─────────────────────────────────────────────────────────────────
-window.addEventListener('mousemove', (e) => {
+// ── Event handler ─────────────────────────────────────────
+// { capture: true }: listener che gira nella fase di CATTURA (PRIMA
+// che l'evento scenda ai listener di OrbitControls registrati sul domElement).
+// Senza capture, OrbitControls vedrebbe il pointerdown e inizierebbe il proprio
+// drag prima che noi potessimo bloccarlo.
+
+// 1) pointermove
+window.addEventListener('pointermove', (e) => {
   pointer.x =  (e.clientX / window.innerWidth)  * 2 - 1
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
 
   if (!draggedAsteroid) return
 
+  e.stopPropagation()
+
   raycaster.setFromCamera(pointer, camera)
   if (!raycaster.ray.intersectPlane(dragPlane, _hit)) return
 
-  // FIX: _hit è in world space, ma .position è in local space di asteroidGroup.
+  // _hit è in world space, ma .position è in local space di asteroidGroup.
   // worldToLocal converte il punto prima di assegnarlo, altrimenti l'asteroide
   // finisce in una posizione sbagliata se asteroidGroup ha una matrice non-identity.
   const worldTarget = new THREE.Vector3().copy(_hit).add(dragOffset)
@@ -630,44 +645,43 @@ window.addEventListener('mousemove', (e) => {
   //   'distance mouse->plane',
   //   camera.position.distanceTo(_hit)
   // )
-})
+}, { capture: true })
 
-// ── mousedown ─────────────────────────────────────────────────────────────────
-renderer.domElement.addEventListener('mousedown', (e) => {
+// 2) pointerdown
+renderer.domElement.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return
 
+  // Converte le coordinate pixel in NDC (Normalized Device Coordinates)
   pointer.x =  (e.clientX / window.innerWidth)  * 2 - 1
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
 
   raycaster.setFromCamera(pointer, camera)
   const hits = raycaster.intersectObjects(asteroidGroup.children, true)
 
-  if (hits.length === 0) return
+  if (hits.length === 0) return   // click nel vuoto: nessun drag da iniziare
 
+  // risalire alla radice del clone perché il drag deve spostare l'intero asteroide, non un sotto-nodo
   const root = findRootAsteroid(hits[0].object)
   if (!root) return
 
   draggedAsteroid = root
-  // FIX: flag sul clone invece di confronto per riferimento nell'animate loop.
+
   draggedAsteroid.userData.isDragged = true
 
-  // FIX: drag plane passante per hits[0].point (punto esatto sulla superficie),
-  // non per draggedAsteroid.position (pivot del root Group).
-  // Evita il "salto" al primo movimento quando il click non è sul centro del mesh.
   const camDir = new THREE.Vector3()
   camera.getWorldDirection(camDir)
   dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), hits[0].point)
 
-  // Offset = world position del root − hits[0].point.
-  // Usiamo direttamente hits[0].point invece di fare una seconda intersezione
-  // col piano: è lo stesso valore (il piano passa esattamente per quel punto)
-  // ma evita qualsiasi drift numerico da una doppia chiamata al raycaster.
   const worldPos = new THREE.Vector3()
   draggedAsteroid.getWorldPosition(worldPos)
   console.log('Rilascio - inizio posizione (world):', worldPos.toArray())
   dragOffset = new THREE.Vector3().subVectors(worldPos, hits[0].point)
 
   controls.enabled = false
+
+  const cancel = new PointerEvent('pointercancel', { pointerId: e.pointerId })
+  renderer.domElement.dispatchEvent(cancel)
+
   e.stopPropagation()
 
   // console.log('root', worldPos)
@@ -676,13 +690,12 @@ renderer.domElement.addEventListener('mousedown', (e) => {
   //   'distance',
   //   worldPos.distanceTo(hits[0].point)
   // )
-})
+}, { capture: true })
 
-// ── mouseup ───────────────────────────────────────────────────────────────────
-window.addEventListener('mouseup', () => {
+// 3) pointerup
+window.addEventListener('pointerup',   () =>  {
   if (!draggedAsteroid) return
 
-  // FIX: .position è in local space → getWorldPosition() per i parametri orbitali.
   const worldPos = new THREE.Vector3()
   draggedAsteroid.getWorldPosition(worldPos)
   console.log('Rilascio - fine posizione (world):', worldPos.toArray())
@@ -690,34 +703,17 @@ window.addEventListener('mouseup', () => {
   draggedAsteroid.userData.orbitRadius = Math.sqrt(worldPos.x * worldPos.x + worldPos.z * worldPos.z)
   draggedAsteroid.userData.orbitAngle  = -Math.atan2(worldPos.z, worldPos.x)
   draggedAsteroid.userData.orbitY      = worldPos.y
-  // draggedAsteroid.userData.orbitAxis   = new THREE.Vector3(
-  //   (Math.random() - 0.5) * 0.3,
-  //   1,
-  //   (Math.random() - 0.5) * 0.3
-  // ).normalize()
   draggedAsteroid.userData.orbitAxis = new THREE.Vector3(0, 1, 0)
-
-  console.log('prima', worldPos.toArray())
   
-  const test = new THREE.Vector3(
-    draggedAsteroid.userData.orbitRadius,
-    draggedAsteroid.userData.orbitY,
-    0
-  )
-  
-  const q = new THREE.Quaternion().setFromAxisAngle(
-    draggedAsteroid.userData.orbitAxis,
-    draggedAsteroid.userData.orbitAngle
-  )
-  
-  test.applyQuaternion(q)
-  
-  console.log('ricostruita', test.toArray())
-
   draggedAsteroid.userData.isDragged = false
-  draggedAsteroid  = null
-  dragOffset       = null
-  controls.enabled = true
+  draggedAsteroid = null
+  dragOffset      = null
+
+  // Riabilita DOPO un frame, così il pointerup non viene letto da OrbitControls
+  // come inizio di una nuova interazione
+  requestAnimationFrame(() => {
+    controls.enabled = true
+  })
 })
 
 // ─── Resize handler ───────────────────────────────────────────────────────────
@@ -735,29 +731,35 @@ const _axis = new THREE.Vector3()
 function animate() {
   requestAnimationFrame(animate)
 
-  const dt = clock.getDelta()
+  const dt = clock.getDelta() // secondi trascorsi dall'ultimo frame
 
   updateHoverHighlight()
 
   asteroidGroup.children.forEach((asteroid) => {
+    // Salta l'aggiornamento orbitale mentre l'utente trascina questo asteroide
     if (asteroid.userData.isDragged) return
 
     const ud = asteroid.userData
 
     ud.orbitAngle += ud.orbitSpeed * guiParams.orbitSpeedMultiplier * dt
+    // Costruisce la nuova posizione orbitale con un quaternione
     _axis.copy(ud.orbitAxis)
     _quat.setFromAxisAngle(_axis, ud.orbitAngle)
     const worldPos = new THREE.Vector3(ud.orbitRadius, ud.orbitY, 0)
     worldPos.applyQuaternion(_quat)
-    asteroidGroup.worldToLocal(worldPos)
+    asteroidGroup.worldToLocal(worldPos)  // da world space a local space di asteroidGroup
     asteroid.position.copy(worldPos)
 
+    // Ruota l'asteroide attorno al proprio asse di spin
     asteroid.rotateOnAxis(ud.spinAxis, ud.spinSpeed * guiParams.spinSpeedMultiplier * dt)
   })
 
   if (guiParams.collisionsEnabled) checkCollisions()
   updateShip(dt)
 
+  // Aggiornamento esplosioni attive.
+  // N.B. : splice(e, 1) rimuove l'elemento all'indice e,
+  // iterando in avanti la rimozione sposterebbe gli indici saltando l'elemento successivo.
   for (let e = explosions.length - 1; e >= 0; e--) {
 
     const explosion = explosions[e]
@@ -780,6 +782,7 @@ function animate() {
     explosion.points.material.opacity = alpha
     explosion.light.intensity = alpha * 250
 
+    // pulisce esplosione finita
     if (explosion.life <= 0) {
       scene.remove(explosion.points)
       scene.remove(explosion.light)
@@ -790,7 +793,7 @@ function animate() {
   }
 
   controls.update()
-  renderer.render(scene, camera)
+  renderer.render(scene, camera)  // renderizzare scena
 }
 
 animate()

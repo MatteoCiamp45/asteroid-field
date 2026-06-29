@@ -717,6 +717,7 @@ window.addEventListener('resize', () => {
 
 // ─── Animation loop ───────────────────────────────────────────────────────────
 const clock = new THREE.Clock()
+const _quat = new THREE.Quaternion()
 const _axis = new THREE.Vector3()
 
 function animate() {
@@ -733,16 +734,11 @@ function animate() {
     const ud = asteroid.userData
 
     ud.orbitAngle += ud.orbitSpeed * guiParams.orbitSpeedMultiplier * dt
-    // Costruisce la nuova posizione orbitale
+    // Costruisce la nuova posizione orbitale con un quaternione
     _axis.copy(ud.orbitAxis)
-    const x = Math.cos(ud.orbitAngle) * ud.orbitRadius
-    const z = Math.sin(ud.orbitAngle) * ud.orbitRadius * 0.5
-
-    const worldPos = new THREE.Vector3(
-      x,
-      ud.orbitY,
-      z
-    )
+    _quat.setFromAxisAngle(_axis, ud.orbitAngle)
+    const worldPos = new THREE.Vector3(ud.orbitRadius, ud.orbitY, 0)
+    worldPos.applyQuaternion(_quat)
     asteroidGroup.worldToLocal(worldPos)  // da world space a local space di asteroidGroup
     asteroid.position.copy(worldPos)
 

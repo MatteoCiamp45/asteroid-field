@@ -38,11 +38,11 @@ function hideLoadingScreen() {
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setSize(window.innerWidth, window.innerHeight)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-renderer.shadowMap.enabled   = true
-renderer.shadowMap.type      = THREE.PCFSoftShadowMap
-renderer.toneMapping         = THREE.ACESFilmicToneMapping
+renderer.shadowMap.enabled   = true                             // abilita ombre
+renderer.shadowMap.type      = THREE.PCFSoftShadowMap           // ombre morbide
+renderer.toneMapping         = THREE.ACESFilmicToneMapping      // colore più naturale
 renderer.toneMappingExposure = 1.2
-document.body.appendChild(renderer.domElement)
+document.body.appendChild(renderer.domElement)                  // aggiungere canvas a pagina html
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene()
@@ -51,18 +51,18 @@ const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(
   60,
   window.innerWidth / window.innerHeight,
-  0.1,
-  5000
+  0.1,    // near clipping
+  5000    // far clipping
 )
 camera.position.set(0, 40, 120)
 
 // ─── Orbit controls ───────────────────────────────────────────────────────────
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.target.set(0, 0, 0)
-controls.enableDamping  = true
+controls.enableDamping  = true    // attiva movimenti fluidi
 controls.dampingFactor  = 0.05
 controls.minDistance    = 10
-controls.maxDistance    = 600
+controls.maxDistance    = 400
 controls.update()
 
 // ─── Lights ───────────────────────────────────────────────────────────────────
@@ -83,10 +83,6 @@ sun.shadow.bias          = -0.001
 scene.add(sun)
 scene.add(sun.target)
 
-const rimLight = new THREE.DirectionalLight(0x2244aa, 0.6)        // luce secondaria (rim light)
-rimLight.position.set(-150, -80, -120)
-scene.add(rimLight)
-
 // ─── Debug GUI ────────────────────────────────────────────────────────────────
 const guiParams = {
   // Orbite
@@ -94,7 +90,7 @@ const guiParams = {
   spinSpeedMultiplier:  1.0,
   // Campo
   fieldRadius:    200,
-  fieldThickness: 60,
+  fieldThickness: 100,
   // Luci
   shadows:          true,
   ambientIntensity: 1.2,
@@ -145,6 +141,7 @@ folderField.add(guiParams, 'fieldThickness', 0, 200, 1).name('Thickness').onChan
 const folderLights = gui.addFolder('Lights')
 folderLights.add(guiParams, 'shadows').name('Shadows').onChange((val) => {
   renderer.shadowMap.enabled = val
+  // scorre tutti gli oggetti della scena e aggiorna i materiali
   scene.traverse((node) => {
     if (node.isMesh) node.material.needsUpdate = true
   })
@@ -195,7 +192,7 @@ const SKYBOX_FILES = [
 // ─── Asteroid constants ───────────────────────────────────────────────────────
 const ASTEROID_COUNT  = 20
 const FIELD_RADIUS    = 200
-const FIELD_THICKNESS = 60
+const FIELD_THICKNESS = 100
 const SCALE_MIN       = 5
 const SCALE_MAX       = 25
 
@@ -204,15 +201,15 @@ const asteroidGroup = new THREE.Group() // tutti gli asteroidi sono figli di que
 scene.add(asteroidGroup)
 
 // ─── Loaders ──────────────────────────────────────────────────────────────────
-const manager     = new THREE.LoadingManager()
-const cubeLoader  = new THREE.CubeTextureLoader(manager)
+const manager     = new THREE.LoadingManager()              // gestore barra caricamento
+const cubeLoader  = new THREE.CubeTextureLoader(manager)    // loader skybox
 const gltfLoader  = new GLTFLoader(manager)
-const dracoLoader = new DRACOLoader()
+const dracoLoader = new DRACOLoader()                       // loader per mesh compresse in DRACO
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/')
 gltfLoader.setDRACOLoader(dracoLoader)
 
 manager.onProgress = (_url, loaded, total) => {
-  setProgress(loaded / total, `Loading assets… ${loaded}/${total}`)
+  setProgress(loaded / total, `Loading assets… ${loaded}/${total}`) // aggiorna barra progresso
 }
 manager.onLoad = () => {
   setProgress(1, 'Done!')
@@ -237,8 +234,7 @@ gltfLoader.load(
   ASTEROID_MODEL_PATH,
 
   (gltf) => {
-    const sourceScene = gltf.scene
-    // abilitare ombre su tutti i mesh del modello originale
+    const sourceScene = gltf.scene  // recupera scena dalla mesh
     sourceScene.traverse((node) => {
       if (node.isMesh) {
         node.castShadow    = true // ombre proiettate
@@ -247,7 +243,7 @@ gltfLoader.load(
     })
 
     // normalizzazione modello GLTF
-    const bbox = new THREE.Box3().setFromObject(sourceScene)
+    const bbox = new THREE.Box3().setFromObject(sourceScene)    // parallelepipedo che racchiude la mesh
     const size = new THREE.Vector3()
     bbox.getSize(size)
     const maxDim    = Math.max(size.x, size.y, size.z)
@@ -268,7 +264,7 @@ gltfLoader.load(
       clone.scale.setScalar(s)
       clone.updateMatrixWorld(true)
 
-      // bounding sphere per le collisioni
+      // bounding sphere per le collisioni (sfera minima che contiene l'intera mesh)
       const sphere = new THREE.Sphere()
       new THREE.Box3()
         .setFromObject(clone)
@@ -282,13 +278,6 @@ gltfLoader.load(
         Math.random() * Math.PI * 2
       )
 
-      const axis = new THREE.Vector3(
-        (Math.random() - 0.5) * 0.3,
-        1,
-        (Math.random() - 0.5) * 0.3
-      ).normalize()
-
-      // clone.userData.orbitAxis   = axis
       clone.userData.orbitAxis = new THREE.Vector3(0, 1, 0)
       clone.userData.orbitSpeed  = 0.005 + Math.random() * 0.025
       clone.userData.orbitAngle  = angle
@@ -309,11 +298,11 @@ gltfLoader.load(
       clone.userData.baseOrbitY      = clone.userData.orbitY
 
 
-      // clonazione materiali:
+      // Clonazione materiali:
       // sourceScene.clone(true) condivide i materiali tra tutti i cloni,
       // impostare emissive.setHex(0xff0000) su un mesh cambierebbe il colore
       // di tutti gli asteroidi contemporaneamente.
-      // Clonando ogni materiale qui, ogni clone ha istanze proprie e indipendenti.
+      // Clonando ogni materiale ogni clone ha istanze proprie e indipendenti.
       clone.traverse((node) => {
         if (node.isMesh && node.material) {
           node.material = Array.isArray(node.material)
@@ -408,7 +397,7 @@ let dragOffset      = null   // offset da pivot a hit point, in world space
 
 // ── Navicella ─────────────────────────────────────────────────────────────────
 // Raggio orbita navicella: appena fuori dal bordo esterno del campo
-const SHIP_ORBIT_RADIUS = FIELD_RADIUS * 1.15
+const SHIP_ORBIT_RADIUS = FIELD_RADIUS * 1.5
 const SHIP_ORBIT_Y      = 0
 
 // Offset camera in modalità follow (world space relativo alla navicella)
@@ -603,6 +592,7 @@ function updateShip(dt) {
 
     // Posizione desiderata: CAM_OFFSET (dietro/sopra la prua) ruotato secondo
     // l'orientamento corrente della navicella, poi traslato alla sua posizione.
+    
     // applyQuaternion trasforma l'offset da spazio locale navicella a world space.
     _camDesired.copy(CAM_OFFSET).applyQuaternion(ship.quaternion).add(ship.position)
     camera.position.lerp(_camDesired, 0.08)
@@ -629,12 +619,13 @@ window.addEventListener('pointermove', (e) => {
 
   e.stopPropagation()
 
+  // crea raggio da camera verso puntatore
   raycaster.setFromCamera(pointer, camera)
-  if (!raycaster.ray.intersectPlane(dragPlane, _hit)) return
+  if (!raycaster.ray.intersectPlane(dragPlane, _hit)) return  // creca intersezione tra raggio e piano in cui muovere l'oggetto
 
   // _hit è in world space, ma .position è in local space di asteroidGroup.
   // worldToLocal converte il punto prima di assegnarlo, altrimenti l'asteroide
-  // finisce in una posizione sbagliata se asteroidGroup ha una matrice non-identity.
+  // finisce in una posizione sbagliata.
   const worldTarget = new THREE.Vector3().copy(_hit).add(dragOffset)
   asteroidGroup.worldToLocal(worldTarget)
   draggedAsteroid.position.copy(worldTarget)
@@ -664,10 +655,11 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   const root = findRootAsteroid(hits[0].object)
   if (!root) return
 
-  draggedAsteroid = root
+  draggedAsteroid = root  // asteroide da trascinare
 
   draggedAsteroid.userData.isDragged = true
 
+  // Crea il piano del drag
   const camDir = new THREE.Vector3()
   camera.getWorldDirection(camDir)
   dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), hits[0].point)
@@ -725,7 +717,6 @@ window.addEventListener('resize', () => {
 
 // ─── Animation loop ───────────────────────────────────────────────────────────
 const clock = new THREE.Clock()
-const _quat = new THREE.Quaternion()
 const _axis = new THREE.Vector3()
 
 function animate() {
@@ -742,11 +733,16 @@ function animate() {
     const ud = asteroid.userData
 
     ud.orbitAngle += ud.orbitSpeed * guiParams.orbitSpeedMultiplier * dt
-    // Costruisce la nuova posizione orbitale con un quaternione
+    // Costruisce la nuova posizione orbitale
     _axis.copy(ud.orbitAxis)
-    _quat.setFromAxisAngle(_axis, ud.orbitAngle)
-    const worldPos = new THREE.Vector3(ud.orbitRadius, ud.orbitY, 0)
-    worldPos.applyQuaternion(_quat)
+    const x = Math.cos(ud.orbitAngle) * ud.orbitRadius
+    const z = Math.sin(ud.orbitAngle) * ud.orbitRadius * 0.5
+
+    const worldPos = new THREE.Vector3(
+      x,
+      ud.orbitY,
+      z
+    )
     asteroidGroup.worldToLocal(worldPos)  // da world space a local space di asteroidGroup
     asteroid.position.copy(worldPos)
 

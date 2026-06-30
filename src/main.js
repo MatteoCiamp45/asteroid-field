@@ -9,7 +9,8 @@
  * Hover over an asteroid to highlight it (red emissive).
  * Click & drag to move it, orbit recalculates from the drop position.
  * 
- * npm run dev per eseguire
+ * npm run build  -> per compilare
+ * npm run dev    -> per eseguire
  * 
  */
 

@@ -73,8 +73,9 @@ const sun = new THREE.DirectionalLight(0xfff5e0, 5)               // luce princi
 sun.position.set(200, 150, 80)
 sun.castShadow           = true
 sun.shadow.mapSize.set(2048, 2048)
-sun.shadow.camera.near   =   1
+sun.shadow.camera.near   =   1                                    // distanza minima ombre
 sun.shadow.camera.far    = 800
+// area scena in cui genera ombre
 sun.shadow.camera.left   = -250
 sun.shadow.camera.right  =  250
 sun.shadow.camera.top    =  250
@@ -389,8 +390,7 @@ const raycaster = new THREE.Raycaster()
 const pointer   = new THREE.Vector2(-999, -999)   // punta fuori schermo all'inizio (evitare highlight involontari)
 
 const dragPlane = new THREE.Plane()
-const _hit      = new THREE.Vector3() //punto di intersezione raggio-piano (riutilizzato
-                                      // ogni frame per evitare allocazioni in animate)
+const _hit      = new THREE.Vector3() // punto in cui l'asteroide è trascinato
 
 let draggedAsteroid = null   // root Group being dragged
 let dragOffset      = null   // offset da pivot a hit point, in world space
@@ -605,10 +605,6 @@ function updateShip(dt) {
 }
 
 // ── Event handler ─────────────────────────────────────────
-// { capture: true }: listener che gira nella fase di CATTURA (PRIMA
-// che l'evento scenda ai listener di OrbitControls registrati sul domElement).
-// Senza capture, OrbitControls vedrebbe il pointerdown e inizierebbe il proprio
-// drag prima che noi potessimo bloccarlo.
 
 // 1) pointermove
 window.addEventListener('pointermove', (e) => {
@@ -621,7 +617,7 @@ window.addEventListener('pointermove', (e) => {
 
   // crea raggio da camera verso puntatore
   raycaster.setFromCamera(pointer, camera)
-  if (!raycaster.ray.intersectPlane(dragPlane, _hit)) return  // creca intersezione tra raggio e piano in cui muovere l'oggetto
+  if (!raycaster.ray.intersectPlane(dragPlane, _hit)) return  // cerca intersezione tra raggio e piano in cui muovere l'oggetto
 
   // _hit è in world space, ma .position è in local space di asteroidGroup.
   // worldToLocal converte il punto prima di assegnarlo, altrimenti l'asteroide
@@ -636,7 +632,7 @@ window.addEventListener('pointermove', (e) => {
   //   'distance mouse->plane',
   //   camera.position.distanceTo(_hit)
   // )
-}, { capture: true })
+})
 
 // 2) pointerdown
 renderer.domElement.addEventListener('pointerdown', (e) => {
@@ -664,6 +660,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   camera.getWorldDirection(camDir)
   dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), hits[0].point)
 
+  // Offset del drag (distanza tra centro asteroide e il punto di clic)
   const worldPos = new THREE.Vector3()
   draggedAsteroid.getWorldPosition(worldPos)
   console.log('Rilascio - inizio posizione (world):', worldPos.toArray())
@@ -682,7 +679,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   //   'distance',
   //   worldPos.distanceTo(hits[0].point)
   // )
-}, { capture: true })
+})
 
 // 3) pointerup
 window.addEventListener('pointerup',   () =>  {
@@ -756,9 +753,9 @@ function animate() {
 
     const explosion = explosions[e]
 
-    const positions =
-      explosion.points.geometry.attributes.position.array
+    const positions = explosion.points.geometry.attributes.position.array // posizioni delle particelle
 
+    // movimento particelle (velocità diverse)
     for (let i = 0; i < explosion.velocities.length; i++) {
 
       positions[i * 3]     += explosion.velocities[i].x * dt
@@ -766,7 +763,7 @@ function animate() {
       positions[i * 3 + 2] += explosion.velocities[i].z * dt
     }
 
-    explosion.points.geometry.attributes.position.needsUpdate = true
+    explosion.points.geometry.attributes.position.needsUpdate = true  // GPU ridisegna
 
     explosion.life -= dt
     const alpha = explosion.life / explosion.maxLife
@@ -774,13 +771,12 @@ function animate() {
     explosion.points.material.opacity = alpha
     explosion.light.intensity = alpha * 250
 
-    // pulisce esplosione finita
     if (explosion.life <= 0) {
-      scene.remove(explosion.points)
-      scene.remove(explosion.light)
+      scene.remove(explosion.points)        // rimozione particelle
+      scene.remove(explosion.light)         // rimozione luce
       explosion.points.geometry.dispose()
       explosion.points.material.dispose()
-      explosions.splice(e, 1)
+      explosions.splice(e, 1)               // cancella esplosione
     }
   }
 

@@ -181,7 +181,8 @@ folderShip.add(guiParams, 'followShip').name('Follow Camera').onChange((val) => 
 
 // ─── Skybox ───────────────────────────────────────────────────────────────────
 // PATH PLACEHOLDER
-const SKYBOX_PATH  = '/textures/skybox/'
+const SKYBOX_PATH  = import.meta.env.BASE_URL + 'textures/skybox/'
+
 const SKYBOX_FILES = [
   'px.jpg',  // +X right
   'nx.jpg',  // −X left
@@ -230,7 +231,7 @@ const skyboxTexture = cubeLoader.load(
 
 // ─── Asteroid model ───────────────────────────────────────────────────────────
 // PATH PLACEHOLDER
-const ASTEROID_MODEL_PATH = '/models/asteroid/scene.gltf'
+const ASTEROID_MODEL_PATH = import.meta.env.BASE_URL + 'models/asteroid/scene.gltf'
 
 gltfLoader.load(
   ASTEROID_MODEL_PATH,
@@ -338,7 +339,7 @@ gltfLoader.load(
 )
 
 // ─── Ship model ───────────────────────────────────────────────────────────────
-const SHIP_MODEL_PATH = '/models/spaceship/scene.gltf'
+const SHIP_MODEL_PATH = import.meta.env.BASE_URL + 'models/spaceship/scene.gltf'
 let ship = null          // THREE.Object3D, assegnato dopo il caricamento del modello
 let shipAngle = 0        // angolo corrente sull'orbita
 let shipDead  = false    // true dopo collisione
